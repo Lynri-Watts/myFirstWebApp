@@ -21,31 +21,37 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'    # 安全策略
     
 Session(app)  # 初始化Session扩展
 
-idfactory = 0
+from database import Database
 
-class User:
-    def __init__(self, username, password, email, id=None):
-        global idfactory
-        self.username = username
-        self.password = password
-        self.email = email
-        if id is None:
-            idfactory += 1
-            self.id = idfactory
-        else:
-            self.id = id
-    def to_dict(self):
-        return {
-            "username" : self.username,
-            "password" : self.password,
-            "email" : self.email,
-            "id" : self.id,
-        }
+database = Database("root", "123456", "debug_database")
+
+
+# 已弃用，改用mysql存储
+# idfactory = 0
+
+# class User:
+#     def __init__(self, username, password, email, id=None):
+#         global idfactory
+#         self.username = username
+#         self.password = password
+#         self.email = email
+#         if id is None:
+#             idfactory += 1
+#             self.id = idfactory
+#         else:
+#             self.id = id
+#     def to_dict(self):
+#         return {
+#             "username" : self.username,
+#             "password" : self.password,
+#             "email" : self.email,
+#             "id" : self.id,
+#         }
     
-def parse_user(user_dict):
-    return User(user_dict["username"], user_dict["password"], user_dict["email"], user_dict["id"])
+# def parse_user(user_dict):
+#     return User(user_dict["username"], user_dict["password"], user_dict["email"], user_dict["id"])
 
-dic = {}
+# dic = {}
 
 
 @app.route('/api/login', methods=['POST'])
@@ -61,25 +67,31 @@ def login():
     email = data.get('email')
     password = data.get('password')
     
+    the_user = database.get_user_by_email(email)
 
-    if email not in dic or dic[email].password != password:
+    if the_user == None:
         return jsonify({
             "status": "error",
-            "message": "邮箱或密码错误"
+            "message": "用户不存在"
         }), 401
     
-    user = dic[email]
+    if  the_user['password'] != password:
+        return jsonify({
+            "status": "error",
+            "message": "密码错误"
+        }), 401
+    
 
-    session['user_id'] = user.id
+    session['user_id'] = the_user["id"]
     session['logged_in'] = True
     session.permanent = True
     
     return jsonify({
         "status": "success",
         "data": {
-            "user_id": user.id,
-            "username": user.username,
-            "email": user.email,
+            "user_id": the_user["id"],
+            "username": the_user["username"],
+            "email": the_user["email"],
         }
     }), 200
 
@@ -98,28 +110,31 @@ def register():
     username = data.get('username')
     
 
-    if email in dic:
+    if database.get_user_by_email(email) != None:
         return jsonify({
             "status": "error",
             "message": "邮箱已注册"
         }), 401
     
-    user = User(username, password, email)
-    dic[email] = user
+    if database.get_user_by_username(username) != None:
+        return jsonify({
+            "status": "error",
+            "message": "用户名已被使用"
+        }), 401
+    
+    id = database.create_user(username = username, password = password, email = email)
+    
 
-    with open("userdata.json", "w") as f:
-        f.write(json.dumps({k:v.to_dict() for (k,v) in dic.items()}))
-
-    session['user_id'] = user.id
+    session['user_id'] = id
     session['logged_in'] = True
     session.permanent = True
     
     return jsonify({
         "status": "success",
         "data": {
-            "user_id": user.id,
-            "username": user.username,
-            "email": user.email,
+            "user_id": id,
+            "username": username,
+            "email": email,
         }
     }), 200
 
@@ -137,9 +152,9 @@ def logout():
     }), 200
 
 
-with open("userdata.json") as f:
-    dic = json.loads(f.read())
-    dic = {k:parse_user(v) for (k,v) in dic.items()}
+# with open("userdata.json") as f:
+#     dic = json.loads(f.read())
+#     dic = {k:parse_user(v) for (k,v) in dic.items()}
 
-    print(dic)
+#     print(dic)
 app.run(host='localhost', port=5000, debug=True)
