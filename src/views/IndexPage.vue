@@ -108,6 +108,20 @@ h2 {
                 </button>
 
             </form>
+            <br>
+            <!-- 触发按钮 -->
+            <button @click="showDialog = true">注销账号</button>
+
+            <!-- 确认弹窗（用 v-if 或 v-show 控制显示） -->
+            <div v-if="showDialog" class="dialog-overlay">
+                <div class="dialog">
+                    <p>确定要执行此操作吗？</p>
+                    <div class="dialog-buttons">
+                        <button @click="handleConfirm">确认</button>
+                        <button @click="handleCancel">取消</button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </template>
@@ -118,6 +132,7 @@ import { useRouter } from 'vue-router'
 
 const isSubmitting = ref(false);
 const username = ref(localStorage.getItem("username"))
+const showDialog = ref(false);
 
 const router = useRouter()
 
@@ -131,7 +146,8 @@ const handleSubmit = async () => {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-            })
+            }),
+            credentials: 'include' // 关键配置
         });
 
         const data = await response.json();
@@ -142,10 +158,10 @@ const handleSubmit = async () => {
 
         // 存储Token到localStorage
         // localStorage.setItem('access_token', data.data.access_token);
-        console.log(data)
+        // console.log(data)
         localStorage.setItem('username', "")
-        console.log(router)
-        router.push('/login'); //TODO
+        // console.log(router)
+        router.push('/login');
 
     } catch (error) {
         alert(error.message);
@@ -153,6 +169,63 @@ const handleSubmit = async () => {
         isSubmitting.value = false;
     }
 };
+
+const cancelAccount = async () => {
+
+    try {
+        const response = await fetch('http://localhost:5000/api/cancel', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+            }),
+            credentials: 'include' // 关键配置
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || '退出失败');
+        }
+
+        // 存储Token到localStorage
+        // localStorage.setItem('access_token', data.data.access_token);
+        // console.log(data)
+        localStorage.setItem('username', "")
+        // console.log(router)
+
+    } catch (error) {
+        alert(error.message);
+        return false
+    }
+    return true
+};
+
+
+
+window.addEventListener("load", () => {
+    console.log("Loaded! ", username.value);
+    if (username.value === ""){
+        router.push("/login");
+    }
+})
+
+function handleConfirm() {
+    // 执行确认操作
+    console.log("用户点击了确认");
+    cancelAccount().then( (response) => {
+        if (response == true){
+            router.push('/login');
+        }
+    } )
+    showDialog.value = false;
+}
+function handleCancel() {
+    // 关闭弹窗
+    showDialog.value = false;
+}
+
 </script>
 
 <style scoped>
@@ -243,5 +316,31 @@ button:disabled {
 
 .links a:hover {
     text-decoration: underline;
+}
+
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.dialog {
+  background: white;
+  padding: 20px;
+  border-radius: 5px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.dialog-buttons {
+  margin-top: 15px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
 }
 </style>

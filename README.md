@@ -58,4 +58,14 @@ ALTER TABLE users
 ADD CONSTRAINT unique_email UNIQUE (email);
 ```
 
-##
+## Updates
+
+### Add SHA256 Encryption
+
+CREATE TABLE users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(255) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL,
+    password_hash CHAR(64) NOT NULL,  -- SHA256结果长度为64字符
+    salt CHAR(32) NOT NULL            -- 假设盐为16字节的Hex字符串（32字符）
+);

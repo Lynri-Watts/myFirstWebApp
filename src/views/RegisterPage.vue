@@ -115,7 +115,8 @@
           email: form.email,
           password: form.password,
           username: form.username
-        })
+        }),
+        credentials: 'include' // 关键配置
       });
 
       const data = await response.json();

@@ -98,7 +98,8 @@
         body: JSON.stringify({
           email: form.email,
           password: form.password
-        })
+        }),
+        credentials: 'include' // 关键配置
       });
 
       const data = await response.json();
@@ -119,6 +120,7 @@
       isSubmitting.value = false;
     }
   };
+
 </script>
 
 <style scoped>

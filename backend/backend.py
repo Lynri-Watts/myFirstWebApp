@@ -6,9 +6,13 @@ from flask_cors import CORS
 from flask import session
 from flask_session import Session
 import json
+import yaml
+import hashlib
+import secrets
+from datetime import timedelta
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app, resources={r"/api/*": {"origins": "*"}}, supports_credentials=True)
 # 必须配置密钥（生产环境应从环境变量读取）
 app.secret_key = 'your-super-secret-key-123456'
     
@@ -21,10 +25,15 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'    # 安全策略
     
 Session(app)  # 初始化Session扩展
 
-from database import Database
+from database import UserDatabase
 
-database = Database("root", "123456", "debug_database")
+database = UserDatabase("loginsystem", "123456", "debug_database")
 
+app.config.update(
+    PERMANENT_SESSION_LIFETIME=timedelta(days=7),  # 持久会话有效期
+    SESSION_REFRESH_EACH_REQUEST=False,  # 是否每次请求刷新有效期
+    SESSION_COOKIE_SAMESITE='None',
+)
 
 # 已弃用，改用mysql存储
 # idfactory = 0
@@ -56,12 +65,14 @@ database = Database("root", "123456", "debug_database")
 
 @app.route('/api/login', methods=['POST'])
 def login():
+    print("session id: ", session.sid)
+
     data = request.get_json()
     
     if not data or not data.get('email') or not data.get('password'):
         return jsonify({
             "status": "error",
-            "message": "缺少必要参数"
+            "message": "缺少必要参数",
         }), 400
     
     email = data.get('email')
@@ -72,13 +83,20 @@ def login():
     if the_user == None:
         return jsonify({
             "status": "error",
-            "message": "用户不存在"
+            "message": "用户不存在",
+            "session_id": session.sid,
         }), 401
     
-    if  the_user['password'] != password:
+    stored_password_hash = the_user['password_hash']
+    stored_salt = the_user['salt']
+    hash_input = stored_salt + password
+    computed_hash = hashlib.sha256(hash_input.encode()).hexdigest()
+
+    if not secrets.compare_digest(computed_hash, stored_password_hash):
         return jsonify({
             "status": "error",
-            "message": "密码错误"
+            "message": "密码错误",
+            "session_id": session.sid,
         }), 401
     
 
@@ -92,17 +110,22 @@ def login():
             "user_id": the_user["id"],
             "username": the_user["username"],
             "email": the_user["email"],
-        }
+            
+        },
+        "session_id": session.sid,
     }), 200
 
 @app.route('/api/register', methods=['POST'])
 def register():
+    print("session id: ", session.sid)
+
     data = request.get_json()
     
     if not data or not data.get('email') or not data.get('password') or not data.get('username'):
         return jsonify({
             "status": "error",
-            "message": "缺少必要参数"
+            "message": "缺少必要参数",
+            "session_id": session.sid,
         }), 400
     
     email = data.get('email')
@@ -113,16 +136,23 @@ def register():
     if database.get_user_by_email(email) != None:
         return jsonify({
             "status": "error",
-            "message": "邮箱已注册"
+            "message": "邮箱已注册",
+            "session_id": session.sid,
         }), 401
     
     if database.get_user_by_username(username) != None:
         return jsonify({
             "status": "error",
-            "message": "用户名已被使用"
+            "message": "用户名已被使用",
+            "session_id": session.sid,
         }), 401
     
-    id = database.create_user(username = username, password = password, email = email)
+    salt = secrets.token_hex(16)
+    hash_input = salt + password
+    password_hash = hashlib.sha256(hash_input.encode()).hexdigest()
+
+    
+    id = database.create_user(username = username, password_hash = password_hash, salt = salt, email = email)
     
 
     session['user_id'] = id
@@ -135,21 +165,47 @@ def register():
             "user_id": id,
             "username": username,
             "email": email,
-        }
+            
+        },
+        "session_id": session.sid,
     }), 200
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
+    print("session id: ", session.sid)
 
-    session['user_id'] = ""
+    session.pop('user_id', None) 
     session['logged_in'] = False
     session.permanent = True
     
     return jsonify({
         "status": "success",
-        "data": {
-        }
+
+        "session_id": session.sid,
     }), 200
+
+@app.route('/api/cancel', methods=['POST']) # TODO
+def cancel():
+    id = session.get('user_id')
+    print(id)
+    print("session id: ", session.sid)
+
+    session['test'] = 'asdasdasd'
+    print(session.get('test'))
+    
+    if database.delete_user(id):
+        session.pop('user_id', None) 
+        session['logged_in'] = False
+        session.permanent = True
+        return jsonify({
+            "status": "success",
+            "session_id": session.sid,
+        }), 200
+    else:
+        return jsonify({
+            "status": "error",
+            "session_id": session.sid,
+        }), 401
 
 
 # with open("userdata.json") as f:
@@ -158,3 +214,6 @@ def logout():
 
 #     print(dic)
 app.run(host='localhost', port=5000, debug=True)
+
+# session["aaaa"] = "aaa"
+# print(session.get("aaaa"))
